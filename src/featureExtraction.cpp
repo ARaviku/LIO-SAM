@@ -121,12 +121,14 @@ public:
             tf2::Matrix3x3(quat).getRPY(roll, pitch, yaw);
 
             // Set the parameters of the bounding box
-            min_points[i] << x - dx / 2, y - dy / 2, z - dz / 2, 1.0;
-            max_points[i] << x + dx / 2, y + dy / 2, z + dz / 2, 1.0;
+            min_points[i] << - dx / 2,  - dy / 2,  - dz / 2, 1.0;
+            max_points[i] <<  dx / 2, dy / 2, dz / 2, 1.0;
 
             // Set the rotation angle (angle in radians)
-            transforms[i] = pcl::getTransformation(x, y, z, roll, pitch, yaw);
+            transforms[i] = pcl::getTransformation(x, y, z, roll, pitch, yaw).inverse();
+            
         }
+        occludeFeatureFromObject();
 
         std::cout << "Yeah" << std::endl;
     }
@@ -290,10 +292,52 @@ public:
         }
     }
 
+    //check if the point is inside the bounding box
+    bool isPointInsideBoundingBox(const PointType& point)
+    {
+        for (size_t i = 0; i < min_points.size(); ++i)
+        {
+            // std::cout << "is bounding box?" << std::endl; 
+            Eigen::Vector4f pt(point.x, point.y, point.z, 1.0);
+            Eigen::Vector4f transformed_pt = transforms[i] * pt;
+
+            if (transformed_pt.x() >= min_points[i].x() && transformed_pt.x() <= max_points[i].x() &&
+                transformed_pt.y() >= min_points[i].y() && transformed_pt.y() <= max_points[i].y() &&
+                transformed_pt.z() >= min_points[i].z() && transformed_pt.z() <= max_points[i].z())
+            {
+                return true;
+                
+            }
+        }
+        return false;
+    }
+
+
     // occulde features based on 3d bounding box
     void occludeFeatureFromObject()
     {
+        pcl::PointCloud<PointType>::Ptr cornerCloudFiltered(new pcl::PointCloud<PointType>());
+        pcl::PointCloud<PointType>::Ptr surfaceCloudFiltered(new pcl::PointCloud<PointType>());
 
+        for (const auto& point : *cornerCloud)
+        {
+            if (!isPointInsideBoundingBox(point))
+            {
+                cornerCloudFiltered->push_back(point);
+            }
+        }
+
+        for (const auto& point : *surfaceCloud)
+        {
+            if (!isPointInsideBoundingBox(point))
+            {
+                surfaceCloudFiltered->push_back(point);
+            }
+        }
+
+        cornerCloud = cornerCloudFiltered;
+        surfaceCloud = surfaceCloudFiltered;
+        // std::cout << "Occluded function" << std::endl;
     }
 
     void freeCloudInfoMemory()
